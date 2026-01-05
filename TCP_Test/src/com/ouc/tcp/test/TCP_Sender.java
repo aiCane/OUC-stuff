@@ -39,7 +39,10 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		//发送TCP数据报
 		udt_send(tcpPack);
 
-		resetTimer(3000); // [RDT 3.0]
+		/* [RDT 3.0] */
+		timer = new UDT_Timer();
+		retransTask = new UDT_RetransTask(client, tcpPack);
+		timer.schedule(retransTask, 3000, 3000);
 
 		flag = 0;
 
@@ -79,15 +82,13 @@ public class TCP_Sender extends TCP_Sender_ADT {
 				flag = 0;
 
 				udt_send(tcpPack);
-				resetTimer(3000); // [RDT 3.0]
+
+				/* [RDT 3.0] */
+				timer = new UDT_Timer();
+				retransTask = new UDT_RetransTask(client, tcpPack);
+				timer.schedule(retransTask, 3000, 3000);
 			}
 		}
-	}
-
-	private void resetTimer(long time) {
-		timer = new UDT_Timer();
-		retransTask = new UDT_RetransTask(client, tcpPack);
-		timer.schedule(retransTask, time, time);
 	}
 
 	@Override
