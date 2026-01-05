@@ -43,39 +43,38 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 					dataQueue.add(receiveBuffer.remove(expectedSeq));
 					expectedSeq++;
 				}
-			} else if (seqNum > expectedSeq) {
-				if (!receiveBuffer.containsKey(seqNum))
-					receiveBuffer.put(seqNum, datas);
-			}
+			} else if (seqNum > expectedSeq && !receiveBuffer.containsKey(seqNum))
+				receiveBuffer.put(seqNum, datas);
+
+			//生成ACK报文段（设置确认号）
+			tcpH.setTh_ack(seqNum);
+			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+			//回复ACK报文段
+			reply(ackPack);
 
 			//将接收到的正确有序的数据插入data队列，准备交付
-			dataQueue.add(recvPack.getTcpS().getData());
-			expectedSeq = 1 - expectedSeq; // [RDT 2.2]
+			// dataQueue.add(recvPack.getTcpS().getData());
+			// expectedSeq = 1 - expectedSeq; // [RDT 2.2]
 			// sequence++;
-		} else {
-			// System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
-			// System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
-			// System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
-			// System.out.println("Corrupt or Duplicate. Resending ACK for: " + (1-expectedSeq));
-  			// tcpH.setTh_ack(1 - expectedSeq); // [RDT 2.2]
-			// ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-			// tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-			//回复ACK报文段
-			// reply(ackPack);
 		}
-
-		//生成ACK报文段（设置确认号）
-		tcpH.setTh_ack(expectedSeq - 1);
-		ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-		tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-		//回复ACK报文段
-		reply(ackPack);
+//		else {
+//			 System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
+//			 System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
+//			 System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
+//			 System.out.println("Corrupt or Duplicate. Resending ACK for: " + (1-expectedSeq));
+//  			 tcpH.setTh_ack(1 - expectedSeq); // [RDT 2.2]
+//			 ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+//			 tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+//			 // 回复ACK报文段
+//			 reply(ackPack);
+//		}
 
 		System.out.println();
 		
 		
 		//交付数据（每20组数据交付一次）
-		if(dataQueue.size() >= 20)
+		if(dataQueue.size() == 20)
 			deliver_data();	
 	}
 
@@ -111,7 +110,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)2);
+		tcpH.setTh_eflag((byte)7);
 		/* eFlag;
 		0: 信道无错误
 		1: 只出错

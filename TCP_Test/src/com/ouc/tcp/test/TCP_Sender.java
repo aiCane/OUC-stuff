@@ -70,7 +70,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	//不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
 	public void udt_send(TCP_PACKET stcpPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)2);
+		tcpH.setTh_eflag((byte)7);
 		//System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());				
 		//发送数据报
 		client.send(stcpPack);
@@ -81,36 +81,33 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	public void waitACK() {
 		//循环检查ackQueue
 		//循环检查确认号对列中是否有新收到的ACK		
-		if(!ackQueue.isEmpty()){
-			int currentAck=ackQueue.poll();
-			System.out.println("CurrentAck: " + currentAck); // [RDT 2.2]
-			if (currentAck == nextSeqNum) {
-				// System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
-
-				freeTimer();
-
-				for (int i = base; i <= currentAck; i++)
-					windowPackates.remove(i);
-
-				base = currentAck + 1;
-				// flag = 1;
-
-				/* [Pipeline] */
-				if (base < nextSeqNum) resetTimer(windowPackates.get(base), 3000);
-				//break;
-			}else{
-				/* [Pipeline]: currently set to 3.0 (timeout) */
-				// System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
-//				if (timer != null) timer.cancel(); // [RDT 3.0]
-//				flag = 0;
+		if (ackQueue.isEmpty()) return;
+//			/* [Pipeline]: currently set to 3.0 (timeout) */
+//			// System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
+//			if (timer != null) timer.cancel(); // [RDT 3.0]
+//			flag = 0;
 //
-//				udt_send(tcpPack);
+//			udt_send(tcpPack);
 //
-//				/* [RDT 3.0] */
-//				timer = new UDT_Timer();
-//				retransTask = new UDT_RetransTask(client, tcpPack);
-//				timer.schedule(retransTask, 3000, 3000);
-			}
+//			/* [RDT 3.0] */
+//			timer = new UDT_Timer();
+//			retransTask = new UDT_RetransTask(client, tcpPack);
+//			timer.schedule(retransTask, 3000, 3000);
+
+		int currentAck = ackQueue.poll();
+		System.out.println("CurrentAck: " + currentAck); // [RDT 2.2]
+		if (windowPackates.containsKey(currentAck)) {
+			// System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
+
+			/* [Pipeline] */
+			windowPackates.remove(currentAck);
+
+			while (!windowPackates.containsKey(base) && base < nextSeqNum) base++;
+
+			freeTimer();
+
+			if (windowPackates.containsKey(base) && base < nextSeqNum)
+				resetTimer(windowPackates.get(base), 3000);
 		}
 	}
 
