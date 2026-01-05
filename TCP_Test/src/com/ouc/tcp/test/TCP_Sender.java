@@ -13,6 +13,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	
 	private TCP_PACKET tcpPack;	//待发送的TCP数据报
 	private volatile int flag = 0;
+	private int nextSeq = 0; // [RDT 2.2]
 	
 	/*构造函数*/
 	public TCP_Sender() {
@@ -25,7 +26,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	public void rdt_send(int dataIndex, int[] appData) {
 		
 		//生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序
-		tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号：
+		// tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号：
+		tcpH.setTh_seq(nextSeq); // [RDT 2.2]
 		tcpS.setData(appData);
 		tcpPack = new TCP_PACKET(tcpH, tcpS, destinAddr);		
 				
@@ -39,6 +41,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		//等待ACK报文
 		//waitACK();
 		while (flag==0);
+
+		nextSeq = 1 - nextSeq; // [RDT 2.2]
 	}
 	
 	@Override
@@ -58,13 +62,13 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		//循环检查确认号对列中是否有新收到的ACK		
 		if(!ackQueue.isEmpty()){
 			int currentAck=ackQueue.poll();
-			// System.out.println("CurrentAck: "+currentAck);
-			if (currentAck == tcpPack.getTcpH().getTh_seq()){
-				System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
+			System.out.println("CurrentAck: " + currentAck); // [RDT 2.2]
+			if (currentAck == nextSeq) {
+				// System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
 				flag = 1;
 				//break;
 			}else{
-				System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
+				// System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
 				udt_send(tcpPack);
 				flag = 0;
 			}
