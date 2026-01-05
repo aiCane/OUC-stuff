@@ -14,6 +14,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	private TCP_PACKET tcpPack;	//待发送的TCP数据报
 	private volatile int flag = 0;
 	private int nextSeq = 0; // [RDT 2.2]
+	private UDT_Timer timer; // [RDT 3.0]
+	private UDT_RetransTask retransTask; // [RDT 3.0]
 	
 	/*构造函数*/
 	public TCP_Sender() {
@@ -36,8 +38,11 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		
 		//发送TCP数据报
 		udt_send(tcpPack);
+
+		resetTimer(3000); // [RDT 3.0]
+
 		flag = 0;
-		
+
 		//等待ACK报文
 		//waitACK();
 		while (flag==0);
@@ -65,14 +70,24 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			System.out.println("CurrentAck: " + currentAck); // [RDT 2.2]
 			if (currentAck == nextSeq) {
 				// System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
+				if (timer != null) timer.cancel(); // [RDT 3.0]
 				flag = 1;
 				//break;
 			}else{
 				// System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
-				udt_send(tcpPack);
+				if (timer != null) timer.cancel(); // [RDT 3.0]
 				flag = 0;
+
+				udt_send(tcpPack);
+				resetTimer(3000); // [RDT 3.0]
 			}
 		}
+	}
+
+	private void resetTimer(long time) {
+		timer = new UDT_Timer();
+		retransTask = new UDT_RetransTask(client, tcpPack);
+		timer.schedule(retransTask, time, time);
 	}
 
 	@Override

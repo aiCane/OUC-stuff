@@ -94,8 +94,12 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)1);	//eFlag=0，信道无错误
-				
+		tcpH.setTh_eflag((byte)2);
+		/* eFlag;
+		0: 信道无错误
+		1: 只出错
+		2: 只丢包
+		 */
 		//发送数据报
 		client.send(replyPack);
 	}
