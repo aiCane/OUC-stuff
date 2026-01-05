@@ -43,9 +43,10 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 			expectedSeq = 1 - expectedSeq; // [RDT 2.2]
 			// sequence++;
 		}else{
-			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
-			System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
-			System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
+			// System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
+			// System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
+			// System.out.println("Problem: Packet Number: "+recvPack.getTcpH().getTh_seq()+" + InnerSeq:  "+sequence);
+			System.out.println("Corrupt or Duplicate. Resending ACK for: " + (1-expectedSeq));
 			tcpH.setTh_ack(1 - expectedSeq); // [RDT 2.2]
 			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
 			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
