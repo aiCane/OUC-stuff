@@ -34,7 +34,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			return;
 		}
 
-		//生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序
+		// 生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序 appData.length == 100
 		tcpH.setTh_seq(dataIndex * appData.length + 1); // [GBN] 包序号设置为字节流号：
 		tcpS.setData(appData);
 		TCP_PACKET packet = new TCP_PACKET(tcpH, tcpS, destinAddr);
