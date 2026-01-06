@@ -3,63 +3,63 @@
 
 package com.ouc.tcp.test;
 
-import com.ouc.tcp.client.TCP_Sender_ADT;
-import com.ouc.tcp.client.UDT_RetransTask;
-import com.ouc.tcp.client.UDT_Timer;
+import com.ouc.tcp.client.*;
 import com.ouc.tcp.message.*;
-import com.ouc.tcp.tool.TCP_TOOL;
+
+import java.util.Vector;
 
 public class TCP_Sender extends TCP_Sender_ADT {
-	
-	private TCP_PACKET tcpPack;	//待发送的TCP数据报
-	private volatile int flag = 0;
-	private int nextSeq = 0; // [RDT 2.2]
 
 	/* [RDT 3.0] */
 	private UDT_Timer timer;
 	private UDT_RetransTask retransTask;
+
+	/* [GBN] */
+	private int windowSize = 8; // N
+	private int base = 0;
+	private int nextSeqNum = 0;
+	private Vector<TCP_PACKET> windowPackets = new Vector<>();
 
 	/*构造函数*/
 	public TCP_Sender() {
 		super();	//调用超类构造函数
 		super.initTCP_Sender(this);		//初始化TCP发送端
 	}
-	
+
 	@Override
 	//可靠发送（应用层调用）：封装应用层数据，产生TCP数据报；需要修改
 	public void rdt_send(int dataIndex, int[] appData) {
-		
-		//生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序
-		// tcpH.setTh_seq(dataIndex * appData.length + 1);//包序号设置为字节流号：
-		tcpH.setTh_seq(nextSeq); // [RDT 2.2]
-		tcpS.setData(appData);
-		tcpPack = new TCP_PACKET(tcpH, tcpS, destinAddr);		
-				
-		tcpH.setTh_sum(CheckSum.computeChkSum(tcpPack));
-		tcpPack.setTcpH(tcpH);
-		
-		//发送TCP数据报
-		udt_send(tcpPack);
-		resetTimer(); // [RDT 3.0]
-		flag = 0;
-		
-		//等待ACK报文
-		//waitACK();
-		while (flag==0);
+		if (nextSeqNum >= base + windowSize) {
+			System.out.println("Window Full. Base: " + base);
+			return;
+		}
 
-		nextSeq = 1 - nextSeq; // [RDT 2.2]
+		//生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序
+		tcpH.setTh_seq(dataIndex * appData.length + 1); // [GBN] 包序号设置为字节流号：
+		tcpS.setData(appData);
+		TCP_PACKET packet = new TCP_PACKET(tcpH, tcpS, destinAddr);
+		tcpH.setTh_sum(CheckSum.computeChkSum(packet));
+		packet.setTcpH(tcpH);
+
+		//发送TCP数据报
+		windowPackets.add(packet);
+		udt_send(packet);
+
+		if (base == nextSeqNum) resetTimer(); // [RDT 3.0]
+
+		nextSeqNum++;
 	}
-	
+
 	@Override
 	//不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
 	public void udt_send(TCP_PACKET stcpPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)2);
+		tcpH.setTh_eflag((byte)4);
 		//System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());				
 		//发送数据报
 		client.send(stcpPack);
 	}
-	
+
 	@Override
 	//需要修改
 	public void waitACK() {
@@ -68,25 +68,30 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		if (ackQueue.isEmpty()) return;
 
 		int currentAck = ackQueue.poll(); // may be broken
-		int tcpSeq = tcpPack.getTcpH().getTh_seq();
-		if (currentAck == nextSeq) {
-			System.out.println("Clear: " + tcpSeq);
-			freeTimer(); // [RDT 3.0]
-			flag = 1;
-			//break;
-		} else {
-			System.out.println("Retransmit: " + tcpSeq);
-			/* [RDT 3.0] just wait for timeout */
-			// udt_send(tcpPack);
-			// flag = 0;
+		if (currentAck < base) return;
+
+		int numConfirmed = currentAck - base + 1;
+		for (int i = 0; i < numConfirmed; i++) {
+			if (windowPackets.isEmpty()) break;
+			windowPackets.remove(0);
 		}
+
+		base = currentAck + 1;
+
+		if (base == nextSeqNum) freeTimer(); // [RDT 3.0]
+		else resetTimer();
 	}
 
 	/* [RDT 3.0] */
 	private void resetTimer() {
 		freeTimer(); // close before it even opened
 		timer = new UDT_Timer();
-		retransTask = new UDT_RetransTask(client, tcpPack);
+		retransTask = new UDT_RetransTask(client, null) {
+			@Override
+			public void run() {
+				handleTimeout();
+			}
+		};
 		timer.schedule(retransTask, 3000, 3000);
 	}
 
@@ -97,16 +102,19 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		timer = null;
 	}
 
+	private void handleTimeout() {
+		resetTimer();
+		for (TCP_PACKET p : windowPackets) udt_send(p);
+	}
+
 	@Override
 	//接收到ACK报文：检查校验和，将确认号插入ack队列;NACK的确认号为－1；不需要修改 /* fuck! fuck you!!! */
 	public void recv(TCP_PACKET recvPack) {
 		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
 		ackQueue.add(recvPack.getTcpH().getTh_ack());
 		System.out.println();
-
 	    //处理ACK报文
 	    waitACK();
-	   
 	}
-	
+
 }

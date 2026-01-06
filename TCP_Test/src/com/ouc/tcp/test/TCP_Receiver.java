@@ -9,10 +9,10 @@ import java.io.IOException;
 
 import com.ouc.tcp.client.TCP_Receiver_ADT;
 import com.ouc.tcp.message.*;
-import com.ouc.tcp.tool.TCP_TOOL;
+// import com.ouc.tcp.tool.TCP_TOOL;
 
 public class TCP_Receiver extends TCP_Receiver_ADT {
-	
+
 	private TCP_PACKET ackPack;	//回复的ACK报文段
 	private int expectedSeq = 0; // [RDT 2.2] 用于记录当前待接收的包序号，注意包序号不完全是
 
@@ -37,28 +37,23 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 			//回复ACK报文段
 			reply(ackPack);			
-			
+
 			//将接收到的正确有序的数据插入data队列，准备交付
 			dataQueue.add(recvPack.getTcpS().getData());
-			expectedSeq = 1 - expectedSeq; // [RDT 2.2]
-			// sequence++;
-		}else{
+			expectedSeq++; // [RDT 2.2] [GBN]
+		} else {
 			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
 			System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
 			System.out.println("Problem: Packet Number: "+recvSeq+" + InnerSeq:  "+expectedSeq);
-			tcpH.setTh_ack(1 - expectedSeq); // [RDT 2.2]
+			tcpH.setTh_ack(expectedSeq - 1); // [RDT 2.2] [GBN]
 			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
 			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
 			//回复ACK报文段
 			reply(ackPack);
 		}
-		
-		System.out.println();
-		
-		
+
 		//交付数据（每20组数据交付一次）
-		if(dataQueue.size() == 20) 
-			deliver_data();	
+		if (dataQueue.size() >= 20) deliver_data();
 	}
 
 	@Override
@@ -67,19 +62,19 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 		//检查dataQueue，将数据写入文件
 		File fw = new File("recvData.txt");
 		BufferedWriter writer;
-		
+
 		try {
 			writer = new BufferedWriter(new FileWriter(fw, true));
-			
+
 			//循环检查data队列中是否有新交付数据
 			while(!dataQueue.isEmpty()) {
 				int[] data = dataQueue.poll();
-				
+
 				//将数据写入文件
 				for(int i = 0; i < data.length; i++) {
 					writer.write(data[i] + "\n");
 				}
-				
+
 				writer.flush();		//清空输出缓存
 			}
 			writer.close();
@@ -93,10 +88,9 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//回复ACK报文段
 	public void reply(TCP_PACKET replyPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)2);	//eFlag=0，信道无错误
-				
+		tcpH.setTh_eflag((byte)4);	// eFlag=0，信道无错误
 		//发送数据报
 		client.send(replyPack);
 	}
-	
+
 }
