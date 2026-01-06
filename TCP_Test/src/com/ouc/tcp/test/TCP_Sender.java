@@ -14,7 +14,11 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	private TCP_PACKET tcpPack;	//待发送的TCP数据报
 	private volatile int flag = 0;
 	private int nextSeq = 0; // [RDT 2.2]
-	
+
+	/* [RDT 3.0] */
+	private UDT_Timer timer;
+	private UDT_RetransTask retransTask;
+
 	/*构造函数*/
 	public TCP_Sender() {
 		super();	//调用超类构造函数
@@ -36,6 +40,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		
 		//发送TCP数据报
 		udt_send(tcpPack);
+		resetTimer(); // [RDT 3.0]
 		flag = 0;
 		
 		//等待ACK报文
@@ -49,7 +54,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	//不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
 	public void udt_send(TCP_PACKET stcpPack) {
 		//设置错误控制标志
-		tcpH.setTh_eflag((byte)1);		
+		tcpH.setTh_eflag((byte)2);
 		//System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());				
 		//发送数据报
 		client.send(stcpPack);
@@ -66,13 +71,30 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		int tcpSeq = tcpPack.getTcpH().getTh_seq();
 		if (currentAck == nextSeq) {
 			System.out.println("Clear: " + tcpSeq);
+			freeTimer(); // [RDT 3.0]
 			flag = 1;
 			//break;
 		} else {
 			System.out.println("Retransmit: " + tcpSeq);
-			udt_send(tcpPack);
-			flag = 0;
+			/* [RDT 3.0] just wait for timeout */
+			// udt_send(tcpPack);
+			// flag = 0;
 		}
+	}
+
+	/* [RDT 3.0] */
+	private void resetTimer() {
+		freeTimer(); // close before it even opened
+		timer = new UDT_Timer();
+		retransTask = new UDT_RetransTask(client, tcpPack);
+		timer.schedule(retransTask, 3000, 3000);
+	}
+
+	/* [RDT 3.0] */
+	private void freeTimer() {
+		if (timer == null) return;
+		timer.cancel();
+		timer = null;
 	}
 
 	@Override
