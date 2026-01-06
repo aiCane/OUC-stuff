@@ -20,6 +20,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	private int nextSeqNum = 0;
 	private Vector<TCP_PACKET> windowPackets = new Vector<>();
 
+	private final int APP_DATA_LENGTH = 100;
+
 	/*构造函数*/
 	public TCP_Sender() {
 		super();	//调用超类构造函数
@@ -29,7 +31,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	@Override
 	//可靠发送（应用层调用）：封装应用层数据，产生TCP数据报；需要修改
 	public void rdt_send(int dataIndex, int[] appData) {
-		if (nextSeqNum >= base + windowSize) {
+		if (nextSeqNum >= base + windowSize * appData.length) {
 			System.out.println("Window Full. Base: " + base);
 			return;
 		}
@@ -47,7 +49,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
 		if (base == nextSeqNum) resetTimer(); // [RDT 3.0]
 
-		nextSeqNum++;
+		nextSeqNum += appData.length;
 	}
 
 	@Override
@@ -68,6 +70,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		if (ackQueue.isEmpty()) return;
 
 		int currentAck = ackQueue.poll(); // may be broken
+
+		/* [GBN] 累计确认是 >=base 执行逻辑，这里条件取反可减少缩进 */
 		if (currentAck < base) return;
 
 		int numConfirmed = currentAck - base + 1;
@@ -75,11 +79,15 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			if (windowPackets.isEmpty()) break;
 			windowPackets.remove(0);
 		}
+		while (
+			!windowPackets.isEmpty() &&
+			windowPackets.get(0).getTcpH().getTh_seq() <= currentAck
+		) windowPackets.remove(0);
 
-		base = currentAck + 1;
+		base = currentAck + APP_DATA_LENGTH;
 
-		if (base == nextSeqNum) freeTimer(); // [RDT 3.0]
-		else resetTimer();
+		if (base == nextSeqNum) { freeTimer(); } // [RDT 3.0]
+		else { resetTimer(); }
 	}
 
 	/* [RDT 3.0] */

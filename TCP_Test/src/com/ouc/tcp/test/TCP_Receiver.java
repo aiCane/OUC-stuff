@@ -28,18 +28,12 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	//接收到数据报：检查校验和，设置回复的ACK报文段
 	public void rdt_recv(TCP_PACKET recvPack) {
 		int recvSeq = recvPack.getTcpH().getTh_seq();
+		int replySeq = expectedSeq;
 		//检查校验码，生成ACK
 		if (
 			CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() &&
 			recvSeq == expectedSeq // [RDT 2.2]
 		) {
-			//生成ACK报文段（设置确认号）
-			tcpH.setTh_ack(expectedSeq);
-			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-			//回复ACK报文段
-			reply(ackPack);			
-
 			//将接收到的正确有序的数据插入data队列，准备交付
 			dataQueue.add(recvPack.getTcpS().getData());
 			expectedSeq += APP_DATA_LENGTH; // [RDT 2.2] [GBN]
@@ -47,20 +41,18 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
 			System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
 			System.out.println("Problem: Packet Number: "+recvSeq+" + InnerSeq:  "+expectedSeq);
-			tcpH.setTh_ack(expectedSeq - APP_DATA_LENGTH); // [RDT 2.2] [GBN]
-			ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-			tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-			//回复ACK报文段
-			reply(ackPack);
+			replySeq -= APP_DATA_LENGTH;
 		}
+
+		// 生成ACK报文段（设置确认号）
+		tcpH.setTh_ack(replySeq); // [RDT 2.2] [GBN]
+		ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
+		tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+		//回复ACK报文段
+		reply(ackPack);
 
 		//交付数据（每20组数据交付一次）
 		if (dataQueue.size() >= 20) deliver_data();
-	}
-
-	private boolean chkSeq(int recvSeq, int expectedSeq) {
-		int appDataLength = 100;
-		return (recvSeq - 1) / appDataLength == expectedSeq;
 	}
 
 	@Override
