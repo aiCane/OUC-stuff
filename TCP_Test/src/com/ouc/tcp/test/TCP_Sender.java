@@ -60,28 +60,28 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	public void waitACK() {
 		//循环检查ackQueue
 		//循环检查确认号对列中是否有新收到的ACK		
-		if(!ackQueue.isEmpty()){
-			int currentAck=ackQueue.poll();
-			System.out.println("CurrentAck: " + currentAck); // [RDT 2.2]
-			if (currentAck == nextSeq) {
-				// System.out.println("Clear: "+tcpPack.getTcpH().getTh_seq());
-				flag = 1;
-				//break;
-			}else{
-				// System.out.println("Retransmit: "+tcpPack.getTcpH().getTh_seq());
-				udt_send(tcpPack);
-				flag = 0;
-			}
+		if (ackQueue.isEmpty()) return;
+
+		int currentAck = ackQueue.poll(); // may be broken
+		int tcpSeq = tcpPack.getTcpH().getTh_seq();
+		if (currentAck == nextSeq) {
+			System.out.println("Clear: " + tcpSeq);
+			flag = 1;
+			//break;
+		} else {
+			System.out.println("Retransmit: " + tcpSeq);
+			udt_send(tcpPack);
+			flag = 0;
 		}
 	}
 
 	@Override
-	//接收到ACK报文：检查校验和，将确认号插入ack队列;NACK的确认号为－1；不需要修改
+	//接收到ACK报文：检查校验和，将确认号插入ack队列;NACK的确认号为－1；不需要修改 /* fuck! fuck you!!! */
 	public void recv(TCP_PACKET recvPack) {
 		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
 		ackQueue.add(recvPack.getTcpH().getTh_ack());
-	    System.out.println();	
-	   
+		System.out.println();
+
 	    //处理ACK报文
 	    waitACK();
 	   
