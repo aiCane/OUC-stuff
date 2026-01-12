@@ -16,8 +16,8 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
 	/* [GBN] */
 	private int windowSize = 8; // N
-	private int base = 0;
-	private int nextSeqNum = 0;
+	private int base = 1;
+	private int nextSeqNum = 1;
 	private Vector<TCP_PACKET> windowPackets = new Vector<>();
 
 	private final int APP_DATA_LENGTH = 100;
@@ -31,13 +31,14 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	@Override
 	//可靠发送（应用层调用）：封装应用层数据，产生TCP数据报；需要修改
 	public void rdt_send(int dataIndex, int[] appData) {
-		if (nextSeqNum >= base + windowSize * appData.length) {
+		// if (nextSeqNum >= base + windowSize * appData.length) { /* [GBN] wrong */
+		if (nextSeqNum > (base + windowSize - 1)) { // [GBN] [base, base + windowSize - 1]
 			System.out.print(".");
 			return;
 		}
 
 		// 生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序 appData.length == 100
-		tcpH.setTh_seq(dataIndex * appData.length + 1); // [GBN] 包序号设置为字节流号：
+		tcpH.setTh_seq(nextSeqNum); // [GBN] 包序号设置为字节流号：
 		tcpS.setData(appData);
 		TCP_PACKET packet = new TCP_PACKET(tcpH, tcpS, destinAddr);
 		tcpH.setTh_sum(CheckSum.computeChkSum(packet));
@@ -49,7 +50,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
 		if (base == nextSeqNum) resetTimer(); // [RDT 3.0]
 
-		nextSeqNum += appData.length;
+		nextSeqNum++;
 	}
 
 	@Override
@@ -74,14 +75,18 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		/* [GBN] 累计确认是 if (currentAck >= base) 执行逻辑 */
 		if (currentAck < base) return; // 这里条件取反可减少缩进
 
+		int curAckedNum = 0;
 		while (
 			!windowPackets.isEmpty() &&
 			windowPackets.get(0).getTcpH().getTh_seq() <= currentAck
-		) windowPackets.remove(0);
+		) {
+			windowPackets.remove(0);
+			curAckedNum++;
+		}
 
-		base = currentAck + APP_DATA_LENGTH;
+		base = currentAck + 1;
 
-		if (base == nextSeqNum) { freeTimer(); } // [RDT 3.0]
+		if (windowPackets.isEmpty()) { freeTimer(); } // [RDT 3.0]
 		else { resetTimer(); }
 	}
 
@@ -107,7 +112,10 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
 	private void handleTimeout() {
 		resetTimer();
-		for (TCP_PACKET p : windowPackets) udt_send(p);
+		for (TCP_PACKET p : windowPackets) {
+			System.out.println("   Re-transmitting seq: " + p.getTcpH().getTh_seq()); // Debug log
+			udt_send(p);
+		}
 	}
 
 	@Override
