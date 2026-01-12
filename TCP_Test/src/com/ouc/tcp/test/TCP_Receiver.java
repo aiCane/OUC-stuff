@@ -38,9 +38,9 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 			dataQueue.add(recvPack.getTcpS().getData());
 			expectedSeq += APP_DATA_LENGTH; // [RDT 2.2] [GBN]
 		} else {
-			System.out.println("Recieve Computed: "+CheckSum.computeChkSum(recvPack));
-			System.out.println("Recieved Packet"+recvPack.getTcpH().getTh_sum());
-			System.out.println("Problem: Packet Number: "+recvSeq+" + InnerSeq:  "+expectedSeq);
+			System.out.println("Recieve Computed: " + CheckSum.computeChkSum(recvPack));
+			System.out.println("Recieved Packet : " + recvPack.getTcpH().getTh_sum());
+			System.out.println("Problem:\nPacket Number: " + recvSeq + " + InnerSeq: " + expectedSeq);
 			replySeq -= APP_DATA_LENGTH;
 		}
 

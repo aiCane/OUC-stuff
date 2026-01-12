@@ -32,7 +32,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	//可靠发送（应用层调用）：封装应用层数据，产生TCP数据报；需要修改
 	public void rdt_send(int dataIndex, int[] appData) {
 		if (nextSeqNum >= base + windowSize * appData.length) {
-			System.out.println("Window Full. Base: " + base);
+			System.out.print(".");
 			return;
 		}
 
@@ -71,14 +71,9 @@ public class TCP_Sender extends TCP_Sender_ADT {
 
 		int currentAck = ackQueue.poll(); // may be broken
 
-		/* [GBN] 累计确认是 >=base 执行逻辑，这里条件取反可减少缩进 */
-		if (currentAck < base) return;
+		/* [GBN] 累计确认是 if (currentAck >= base) 执行逻辑 */
+		if (currentAck < base) return; // 这里条件取反可减少缩进
 
-		int numConfirmed = currentAck - base + 1;
-		for (int i = 0; i < numConfirmed; i++) {
-			if (windowPackets.isEmpty()) break;
-			windowPackets.remove(0);
-		}
 		while (
 			!windowPackets.isEmpty() &&
 			windowPackets.get(0).getTcpH().getTh_seq() <= currentAck
