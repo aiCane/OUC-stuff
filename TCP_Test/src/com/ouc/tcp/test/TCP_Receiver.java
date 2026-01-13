@@ -7,16 +7,25 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 
+import java.net.InetAddress;
+
+import java.util.Map;
+import java.util.HashMap;
+
 import com.ouc.tcp.client.TCP_Receiver_ADT;
 import com.ouc.tcp.message.*;
 // import com.ouc.tcp.tool.TCP_TOOL;
 
 public class TCP_Receiver extends TCP_Receiver_ADT {
 
-	private TCP_PACKET ackPack;	//回复的ACK报文段
+	private TCP_PACKET ackPack; // 回复的ACK报文段
 	private int expectedSeq = 1; // [RDT 2.2] 用于记录当前待接收的包序号，注意包序号不完全是
 
-	private final int APP_DATA_LENGTH = 100;
+	/* [SR] */
+	private Map<Integer, TCP_PACKET> recvCache = new HashMap<>();
+	private final int windowSize = 8;
+
+	// private final int APP_DATA_LENGTH = 100;
 
 	/*构造函数*/
 	public TCP_Receiver() {
@@ -27,31 +36,38 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 	@Override
 	//接收到数据报：检查校验和，设置回复的ACK报文段
 	public void rdt_recv(TCP_PACKET recvPack) {
-		int recvSeq = recvPack.getTcpH().getTh_seq();
-		// int replySeq = expectedSeq - 1;
-		//检查校验码，生成ACK
-		if (
-			CheckSum.computeChkSum(recvPack) == recvPack.getTcpH().getTh_sum() &&
-			recvSeq == expectedSeq // [RDT 2.2]
-		) {
-			//将接收到的正确有序的数据插入data队列，准备交付
-			dataQueue.add(recvPack.getTcpS().getData());
-			expectedSeq++; // [RDT 2.2] [GBN]
-		} else {
-			System.out.println("Recieve Computed: " + CheckSum.computeChkSum(recvPack));
-			System.out.println("Recieved Packet : " + recvPack.getTcpH().getTh_sum());
-			System.out.println("Problem:\nPacket Number: " + recvSeq + " + InnerSeq: " + expectedSeq);
-		}
+		if (CheckSum.computeChkSum(recvPack) != recvPack.getTcpH().getTh_sum()) return;
 
-		// 生成ACK报文段（设置确认号）
-		tcpH.setTh_ack(expectedSeq - 1); // [RDT 2.2] [GBN]
-		ackPack = new TCP_PACKET(tcpH, tcpS, recvPack.getSourceAddr());
-		tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
-		//回复ACK报文段
-		reply(ackPack);
+		int recvSeq = recvPack.getTcpH().getTh_seq();
+		System.out.println("Receving " + recvSeq + ", expected " + expectedSeq);
+		if (recvSeq < expectedSeq) {
+			System.out.println("Replying an old one");
+			replyAck(recvSeq, recvPack.getSourceAddr());
+		} else if (recvSeq < expectedSeq + windowSize) {
+			if (!recvCache.containsKey(recvSeq)) recvCache.put(recvSeq, recvPack);
+
+			while (recvCache.containsKey(expectedSeq)) {
+				TCP_PACKET p = recvCache.get(expectedSeq);
+				dataQueue.add(p.getTcpS().getData());
+				recvCache.remove(expectedSeq);
+				expectedSeq++;
+			}
+
+			System.out.println("Replying a new one");
+			replyAck(recvSeq, recvPack.getSourceAddr());
+		} // else // recvSeq >= expectedSeq + windowSize
 
 		//交付数据（每20组数据交付一次）
 		if (dataQueue.size() >= 20) deliver_data();
+	}
+
+	private void replyAck(int ackNum, InetAddress address) {
+		// 生成ACK报文段（设置确认号）
+		tcpH.setTh_ack(ackNum);
+		ackPack = new TCP_PACKET(tcpH, tcpS, address);
+		tcpH.setTh_sum(CheckSum.computeChkSum(ackPack));
+		//回复ACK报文段
+		reply(ackPack);
 	}
 
 	@Override
