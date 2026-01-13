@@ -6,7 +6,7 @@ package com.ouc.tcp.test;
 import com.ouc.tcp.client.*;
 import com.ouc.tcp.message.*;
 
-import java.util.Vector;
+import java.util.TimerTask;
 
 public class TCP_Sender extends TCP_Sender_ADT {
 
@@ -18,7 +18,7 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	private int windowSize = 8; // N
 	private int base = 1;
 	private int nextSeqNum = 1;
-	private Vector<TCP_PACKET> windowPackets = new Vector<>();
+	private TCP_PACKET[] windowPackets = new TCP_PACKET[windowSize];
 
 	private final int APP_DATA_LENGTH = 100;
 
@@ -36,17 +36,21 @@ public class TCP_Sender extends TCP_Sender_ADT {
 			System.out.print(".");
 			return;
 		}
+		System.out.println();
 
 		// 生成TCP数据报（设置序号和数据字段/校验和),注意打包的顺序 appData.length == 100
-		tcpH.setTh_seq(nextSeqNum); // [GBN] 包序号设置为字节流号：
-		tcpS.setData(appData);
-		TCP_PACKET packet = new TCP_PACKET(tcpH, tcpS, destinAddr);
-		tcpH.setTh_sum(CheckSum.computeChkSum(packet));
-		packet.setTcpH(tcpH);
+		TCP_HEADER localH = new TCP_HEADER();
+		localH.setTh_seq(nextSeqNum); // [GBN] 包序号设置为字节流号：
+		TCP_SEGMENT localS = new TCP_SEGMENT();
+		localS.setData(appData);
+		TCP_PACKET localP = new TCP_PACKET(localH, localS, destinAddr);
+		localH.setTh_sum(CheckSum.computeChkSum(localP));
+		localP.setTcpH(localH);
 
 		//发送TCP数据报
-		windowPackets.add(packet);
-		udt_send(packet);
+		windowPackets[nextSeqNum % windowSize] = localP;
+		localH.setTh_eflag((byte)7);
+		udt_send(localP);
 
 		if (base == nextSeqNum) resetTimer(); // [RDT 3.0]
 
@@ -56,10 +60,10 @@ public class TCP_Sender extends TCP_Sender_ADT {
 	@Override
 	//不可靠发送：将打包好的TCP数据报通过不可靠传输信道发送；仅需修改错误标志
 	public void udt_send(TCP_PACKET stcpPack) {
-		//设置错误控制标志
-		tcpH.setTh_eflag((byte)4);
-		//System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());				
-		//发送数据报
+		// 设置错误控制标志
+		// tcpH.setTh_eflag((byte)7);
+		// System.out.println("to send: "+stcpPack.getTcpH().getTh_seq());
+		// 发送数据报
 		client.send(stcpPack);
 	}
 
@@ -70,37 +74,37 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		//循环检查确认号对列中是否有新收到的ACK		
 		if (ackQueue.isEmpty()) return;
 
-		int currentAck = ackQueue.poll(); // may be broken
+		int currentAck = ackQueue.poll();
 
 		/* [GBN] 累计确认是 if (currentAck >= base) 执行逻辑 */
-		if (currentAck < base) return; // 这里条件取反可减少缩进
-
-		int curAckedNum = 0;
-		while (
-			!windowPackets.isEmpty() &&
-			windowPackets.get(0).getTcpH().getTh_seq() <= currentAck
-		) {
-			windowPackets.remove(0);
-			curAckedNum++;
-		}
+		// if (currentAck < base) return; // 这里条件取反可减少缩进
 
 		base = currentAck + 1;
 
-		if (windowPackets.isEmpty()) { freeTimer(); } // [RDT 3.0]
-		else { resetTimer(); }
+		if (base == nextSeqNum) { freeTimer(); } // [RDT 3.0]
+		else if (base < nextSeqNum) { resetTimer(); }
 	}
 
 	/* [RDT 3.0] */
 	private void resetTimer() {
 		freeTimer(); // close before it even opened
 		timer = new UDT_Timer();
-		retransTask = new UDT_RetransTask(client, null) {
+		TimerTask timeout = new TimerTask() {
 			@Override
 			public void run() {
-				handleTimeout();
+				// System.out.println("Packets: b.arrow");
+				// for (TCP_PACKET p : windowPackets) {
+				//	System.out.println(p.getTcpH().getTh_seq());
+				// }
+				for (int i = base; i < nextSeqNum; i++) {
+					TCP_PACKET p = windowPackets[i % windowSize];
+					if (p == null) continue;
+					System.out.println("Re-cending ack: " + p.getTcpH().getTh_seq());
+					udt_send(p);
+				}
 			}
 		};
-		timer.schedule(retransTask, 3000, 3000);
+		timer.schedule(timeout, 2000, 1000);
 	}
 
 	/* [RDT 3.0] */
@@ -110,18 +114,13 @@ public class TCP_Sender extends TCP_Sender_ADT {
 		timer = null;
 	}
 
-	private void handleTimeout() {
-		resetTimer();
-		for (TCP_PACKET p : windowPackets) {
-			System.out.println("   Re-transmitting seq: " + p.getTcpH().getTh_seq()); // Debug log
-			udt_send(p);
-		}
-	}
-
 	@Override
 	//接收到ACK报文：检查校验和，将确认号插入ack队列;NACK的确认号为－1；不需要修改 /* fuck! fuck you!!! */
 	public void recv(TCP_PACKET recvPack) {
-		System.out.println("Receive ACK Number： "+ recvPack.getTcpH().getTh_ack());
+		if (
+			CheckSum.computeChkSum(recvPack) != recvPack.getTcpH().getTh_sum() ||
+			recvPack.getTcpH().getTh_ack() < base
+		) { return; }
 		ackQueue.add(recvPack.getTcpH().getTh_ack());
 		System.out.println();
 	    //处理ACK报文
