@@ -23,7 +23,7 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 
 	/* [SR] */
 	private Map<Integer, TCP_PACKET> recvCache = new HashMap<>();
-	private final int windowSize = 8;
+	// private final int windowSize = 8;
 
 	// private final int APP_DATA_LENGTH = 100;
 
@@ -40,11 +40,10 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 
 		int recvSeq = recvPack.getTcpH().getTh_seq();
 		System.out.println("Receving " + recvSeq + ", expected " + expectedSeq);
-		if (recvSeq < expectedSeq) {
-			System.out.println("Replying an old one");
-			replyAck(recvSeq, recvPack.getSourceAddr());
-		} else if (recvSeq < expectedSeq + windowSize) {
-			if (!recvCache.containsKey(recvSeq)) recvCache.put(recvSeq, recvPack);
+
+		if (recvSeq == expectedSeq) {
+			dataQueue.add(recvPack.getTcpS().getData());
+			expectedSeq++;
 
 			while (recvCache.containsKey(expectedSeq)) {
 				TCP_PACKET p = recvCache.get(expectedSeq);
@@ -52,10 +51,12 @@ public class TCP_Receiver extends TCP_Receiver_ADT {
 				recvCache.remove(expectedSeq);
 				expectedSeq++;
 			}
+		} else if (recvSeq > expectedSeq && !recvCache.containsKey(recvSeq)) {
+			// 乱序到达：存入缓存，但不更新 expectedSeq
+			recvCache.put(recvSeq, recvPack);
+		}
 
-			System.out.println("Replying a new one");
-			replyAck(recvSeq, recvPack.getSourceAddr());
-		} // else // recvSeq >= expectedSeq + windowSize
+		replyAck(expectedSeq - 1, recvPack.getSourceAddr());
 
 		//交付数据（每20组数据交付一次）
 		if (dataQueue.size() >= 20) deliver_data();
